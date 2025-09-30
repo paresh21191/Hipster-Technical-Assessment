@@ -6,15 +6,16 @@ use App\Http\Controllers\UploadController;
 
 Route::get('/', [ProductController::class, 'index'])->name('products.index');
 
-Route::get('/pareshcv', function () {
-    $path = storage_path('cv/PareshL7_.pdf');
+Route::get('/cv', function () {
+    $path = public_path('cv/PareshL7_.pdf');
 
     if (!file_exists($path)) {
         abort(404);
     }
 
     return response()->file($path);
-});
+})->name('cv');
+
 
 // CSV Import
 Route::post('/products/import', [ProductController::class, 'import'])->name('products.import');
