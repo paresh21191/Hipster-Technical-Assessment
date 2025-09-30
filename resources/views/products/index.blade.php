@@ -115,15 +115,18 @@
                 <td>{{ $product->sku }}</td>
                 <td>{{ $product->name }}</td>
                 <td>${{ number_format($product->price, 2) }}</td>
-                <td>
-                    @if($product->primaryImage)
-                    <!-- <img src="{{ asset('storage/') }}" alt="Test Image" style="max-width: 100px;"> -->
+<td>
+    @if($product->primaryImage)
+        
+<img src="{{ Storage::disk('s3')->temporaryUrl(
+    $product->primaryImage->path,
+    now()->addMinutes(30)
+) }}" alt="Primary Image" style="max-width:100px;">
 
-                        <img src="{{ asset('storage/' . $product->primaryImage->path) }}" alt="Primary Image" style="max-width: 100px;">
-                    @else
-                        No image
-                    @endif
-                </td>
+    @else
+        No image
+    @endif
+</td>
             </tr>
         @endforeach
         </tbody>

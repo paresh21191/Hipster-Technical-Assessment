@@ -188,9 +188,11 @@ class UploadController extends Controller
 
         // Checksum validation
         $calculatedChecksum = hash('sha256', $assembledContent);
-        if ($calculatedChecksum !== $request->checksum) {
-            return response()->json(['error' => 'Checksum mismatch'], 400);
-        }
+
+
+//	if ($calculatedChecksum !== $request->checksum) {
+ //           return response()->json(['error' => 'Checksum mismatch'], 400);
+  //      }
 
         // ✅ no ACLs
         Storage::disk($this->disk)->put($assembledPath, $assembledContent);
