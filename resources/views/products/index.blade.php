@@ -132,6 +132,7 @@
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-sha256@0.9.0/src/sha256.min.js"></script>
 <script>
 $(function() {
     const dropZone = $('#drop-zone');
@@ -139,7 +140,7 @@ $(function() {
     const uploadStatus = $('#upload-status');
 
     
-    async function calculateSHA256(file) {
+  /*  async function calculateSHA256(file) {
         if (window.crypto && window.crypto.subtle) {
             const arrayBuffer = await file.arrayBuffer();
             const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
@@ -150,6 +151,29 @@ $(function() {
             return null;
         }
     }
+*/
+        async function calculateSHA256(file) {
+            if (window.crypto && window.crypto.subtle) {
+                // Modern browsers
+                const arrayBuffer = await file.arrayBuffer();
+                const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            } else if (window.sha256) {
+                // Fallback for older browsers using js-sha256
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const hash = sha256(e.target.result);
+                        resolve(hash);
+                    };
+                    reader.onerror = () => reject('Could not read file for checksum');
+                    reader.readAsBinaryString(file);
+                });
+            } else {
+                throw new Error('SHA-256 not supported in this browser');
+            }
+        }
 
     // Initialize upload on server
     function initUpload(file, uploadIdentifier, productSku, checksum) {
