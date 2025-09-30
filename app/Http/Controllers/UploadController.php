@@ -11,7 +11,13 @@ use Intervention\Image\Facades\Image;
 
 class UploadController extends Controller
 {
-    protected $disk = 'public';
+    // You can set disk in config/filesystems.php ("public" for local, "s3" for AWS)
+    protected $disk;
+
+    public function __construct()
+    {
+        $this->disk = config('filesystems.default', 'public'); 
+    }
 
     public function init(Request $request)
     {
@@ -48,7 +54,6 @@ class UploadController extends Controller
         return response()->json(['message' => 'Upload initialized']);
     }
 
-
     public function upload(Request $request)
     {
         $request->validate([
@@ -68,7 +73,7 @@ class UploadController extends Controller
                 // Save original
                 $originalPath = $file->store('products/original', $this->disk);
 
-                // Generate resized versions with Intervention
+                // Directory for resized versions
                 $resizedDir = 'products/resized';
                 Storage::disk($this->disk)->makeDirectory($resizedDir);
 
@@ -81,13 +86,26 @@ class UploadController extends Controller
                 foreach ($variants as $variant => $width) {
                     $resizedPath = $resizedDir . '/' . $variant . '_' . basename($originalPath);
 
-                    $image = Image::make(Storage::disk($this->disk)->path($originalPath))
-                        ->resize($width, null, function ($constraint) {
-                            $constraint->aspectRatio();
-                            $constraint->upsize();
-                        });
+                    // 🔑 Condition: local vs S3 handling
+                    if ($this->disk === 's3') {
+                        // On S3: use file contents (no path())
+                        $image = Image::make(Storage::disk($this->disk)->get($originalPath))
+                            ->resize($width, null, function ($constraint) {
+                                $constraint->aspectRatio();
+                                $constraint->upsize();
+                            });
 
-                    $image->save(Storage::disk($this->disk)->path($resizedPath));
+                        Storage::disk($this->disk)->put($resizedPath, (string) $image->encode());
+                    } else {
+                        // On local: safe to use path()
+                        $image = Image::make(Storage::disk($this->disk)->path($originalPath))
+                            ->resize($width, null, function ($constraint) {
+                                $constraint->aspectRatio();
+                                $constraint->upsize();
+                            });
+
+                        $image->save(Storage::disk($this->disk)->path($resizedPath));
+                    }
 
                     $uploadedImagePaths[$variant] = $resizedPath;
                 }
@@ -107,7 +125,7 @@ class UploadController extends Controller
         $request->validate([
             'upload_identifier' => 'required|string',
             'chunk_index'       => 'required|integer|min:0',
-            'chunk_data'        => 'required|string', // base64 encoded
+            'chunk_data'        => 'required|string',
         ]);
 
         $upload = Upload::where('upload_identifier', $request->upload_identifier)
@@ -159,16 +177,15 @@ class UploadController extends Controller
             $assembledContent .= Storage::disk($this->disk)->get($chunkPath);
         }
 
-        // Validate checksum
+        // Checksum validation
         $calculatedChecksum = hash('sha256', $assembledContent);
         if ($calculatedChecksum !== $request->checksum) {
             return response()->json(['error' => 'Checksum mismatch'], 400);
         }
 
-        // Save assembled file
         Storage::disk($this->disk)->put($assembledPath, $assembledContent);
 
-        // Generate variants with Intervention
+        // Generate variants
         $variantsDir = "uploads/{$request->upload_identifier}/variants";
         Storage::disk($this->disk)->makeDirectory($variantsDir);
 
@@ -188,13 +205,24 @@ class UploadController extends Controller
                 $variantPath     = "{$variantsDir}/{$variantFilename}";
 
                 if ($width) {
-                    $image = Image::make(Storage::disk($this->disk)->path($assembledPath))
-                        ->resize($width, null, function ($constraint) {
-                            $constraint->aspectRatio();
-                            $constraint->upsize();
-                        });
+                    // 🔑 Condition: local vs S3 handling
+                    if ($this->disk === 's3') {
+                        $image = Image::make(Storage::disk($this->disk)->get($assembledPath))
+                            ->resize($width, null, function ($constraint) {
+                                $constraint->aspectRatio();
+                                $constraint->upsize();
+                            });
 
-                    $image->save(Storage::disk($this->disk)->path($variantPath));
+                        Storage::disk($this->disk)->put($variantPath, (string) $image->encode());
+                    } else {
+                        $image = Image::make(Storage::disk($this->disk)->path($assembledPath))
+                            ->resize($width, null, function ($constraint) {
+                                $constraint->aspectRatio();
+                                $constraint->upsize();
+                            });
+
+                        $image->save(Storage::disk($this->disk)->path($variantPath));
+                    }
                 } else {
                     Storage::disk($this->disk)->copy($assembledPath, $variantPath);
                 }
@@ -215,18 +243,17 @@ class UploadController extends Controller
             return response()->json(['error' => 'Failed processing images: ' . $e->getMessage()], 500);
         }
 
-        // ✅ Clean up chunks
+        // Clean up chunks
         Storage::disk($this->disk)->deleteDirectory($chunksDir);
 
         return response()->json(['message' => 'Upload completed and images processed']);
     }
 
-
     public function attachToProduct(Request $request)
     {
         $request->validate([
             'upload_identifier' => 'required|string',
-            'product_sku'       => 'required|string', // can be single or comma-separated
+            'product_sku'       => 'required|string',
         ]);
 
         $upload = Upload::where('upload_identifier', $request->upload_identifier)
@@ -241,7 +268,6 @@ class UploadController extends Controller
         if (!$originalImage) {
             return response()->json(['error' => 'Original image not found'], 404);
         }
-
 
         $skus = array_map('trim', explode(',', $request->product_sku));
 
