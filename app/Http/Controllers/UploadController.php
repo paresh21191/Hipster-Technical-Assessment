@@ -11,14 +11,16 @@ use Intervention\Image\Facades\Image;
 
 class UploadController extends Controller
 {
-    // You can set disk in config/filesystems.php ("public" for local, "s3" for AWS)
     protected $disk;
 
     public function __construct()
     {
-        $this->disk = config('filesystems.default', 'public'); 
+        $this->disk = config('filesystems.default', 'public');
     }
 
+    /**
+     * Initialize upload session
+     */
     public function init(Request $request)
     {
         $request->validate([
@@ -54,6 +56,9 @@ class UploadController extends Controller
         return response()->json(['message' => 'Upload initialized']);
     }
 
+    /**
+     * Upload and resize product images
+     */
     public function upload(Request $request)
     {
         $request->validate([
@@ -64,10 +69,7 @@ class UploadController extends Controller
         $uploadedImagePaths = [];
 
         if ($request->hasFile('product_images')) {
-            $files = $request->file('product_images');
-            if (!is_array($files)) {
-                $files = [$files];
-            }
+            $files = (array) $request->file('product_images');
 
             foreach ($files as $file) {
                 // Save original
@@ -86,18 +88,18 @@ class UploadController extends Controller
                 foreach ($variants as $variant => $width) {
                     $resizedPath = $resizedDir . '/' . $variant . '_' . basename($originalPath);
 
-                    // 🔑 Condition: local vs S3 handling
                     if ($this->disk === 's3') {
-                        // On S3: use file contents (no path())
+                        // On S3: work with file contents
                         $image = Image::make(Storage::disk($this->disk)->get($originalPath))
                             ->resize($width, null, function ($constraint) {
                                 $constraint->aspectRatio();
                                 $constraint->upsize();
                             });
 
+                        // ✅ no ACLs
                         Storage::disk($this->disk)->put($resizedPath, (string) $image->encode());
                     } else {
-                        // On local: safe to use path()
+                        // On local: work with file path
                         $image = Image::make(Storage::disk($this->disk)->path($originalPath))
                             ->resize($width, null, function ($constraint) {
                                 $constraint->aspectRatio();
@@ -120,6 +122,9 @@ class UploadController extends Controller
         ]);
     }
 
+    /**
+     * Upload a single chunk
+     */
     public function uploadChunk(Request $request)
     {
         $request->validate([
@@ -142,11 +147,15 @@ class UploadController extends Controller
         }
 
         $chunkPath = "uploads/{$request->upload_identifier}/chunks/{$request->chunk_index}.chunk";
+        // ✅ no ACLs
         Storage::disk($this->disk)->put($chunkPath, $chunkData);
 
         return response()->json(['message' => 'Chunk saved']);
     }
 
+    /**
+     * Complete upload and assemble chunks
+     */
     public function complete(Request $request)
     {
         $request->validate([
@@ -183,6 +192,7 @@ class UploadController extends Controller
             return response()->json(['error' => 'Checksum mismatch'], 400);
         }
 
+        // ✅ no ACLs
         Storage::disk($this->disk)->put($assembledPath, $assembledContent);
 
         // Generate variants
@@ -205,7 +215,6 @@ class UploadController extends Controller
                 $variantPath     = "{$variantsDir}/{$variantFilename}";
 
                 if ($width) {
-                    // 🔑 Condition: local vs S3 handling
                     if ($this->disk === 's3') {
                         $image = Image::make(Storage::disk($this->disk)->get($assembledPath))
                             ->resize($width, null, function ($constraint) {
@@ -249,6 +258,9 @@ class UploadController extends Controller
         return response()->json(['message' => 'Upload completed and images processed']);
     }
 
+    /**
+     * Attach upload to product(s)
+     */
     public function attachToProduct(Request $request)
     {
         $request->validate([
