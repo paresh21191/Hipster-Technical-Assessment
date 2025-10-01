@@ -23,7 +23,7 @@ Route::post('/uploads/attach', [UploadController::class, 'attachToProduct'])->na
 
 Route::prefix('demo')->group(function () {
     Route::get('seed', [UserDiscountController::class, 'seed']);
-    Route::post('apply', [UserDiscountController::class, 'applyDemo'])->name('demo.apply');
+    Route::post('/', [UserDiscountController::class, 'applyDemo'])->name('demo.apply');
     Route::get('assign/{user}/{discount}', [UserDiscountController::class, 'assign']);
     Route::get('apply/{user}/{amount}', [UserDiscountController::class, 'apply']);
     Route::get('revoke/{user}/{discount}', [UserDiscountController::class, 'revoke']);
