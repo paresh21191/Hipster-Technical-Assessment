@@ -22,7 +22,7 @@ Route::post('/uploads/complete', [UploadController::class, 'complete'])->name('u
 Route::post('/uploads/attach', [UploadController::class, 'attachToProduct'])->name('uploads.attach'); // attach image to product
 
 Route::prefix('demo')->group(function () {
-    Route::get('seed', [UserDiscountControllerr::class, 'seed']);
+    Route::get('seed', [UserDiscountController::class, 'seed']);
     Route::post('apply', [UserDiscountController::class, 'applyDemo'])->name('demo.apply');
     Route::get('assign/{user}/{discount}', [UserDiscountController::class, 'assign']);
     Route::get('apply/{user}/{amount}', [UserDiscountController::class, 'apply']);
